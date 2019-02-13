@@ -1,0 +1,182 @@
+---
+title: "HJA_fungi_comp"
+author: "Kyle Gervers"
+date: "January 29, 2019"
+output: html_document
+---
+
+```{r}
+library(knitr)
+library(CoDaSeq)
+library(ALDEx2)
+library(compositions)
+library(zCompositions)
+library(igraph)
+library(grDevices)
+library(car)
+library(propr)
+library(grid)
+library(tidyverse)
+library(magrittr)
+library(phyloseq)
+library(ggthemes)
+library(ggplot2)
+library(vegan)
+source("C:/Users/gerve/Desktop/PhD/Projects/DF_MiSeq/CoDaSeq-master/chunk/codaSeq_functions.R")
+
+setwd("C:/Users/gerve/Desktop/PhD/Projects/DF_MiSeq/data/scratch/")
+```
+
+```{r}
+hja.phy <- readRDS("./HJA.fungi.phy.tax.rds")
+
+hja.meta <- read.csv("./HJA_metadata.csv",as.is=T,row.names=1)
+sample_data(hja.phy) <- hja.meta
+
+sample_data(hja.phy)$Height %<>% as.numeric()
+sample_data(hja.phy)$CanopyLevel %<>% as.factor()
+sample_data(hja.phy)$X %<>% as.numeric()
+sample_data(hja.phy)$Y %<>% as.numeric()
+sample_data(hja.phy)$Tree %<>% as.factor()
+sample_data(hja.phy)$Age %<>% as.factor()
+sample_data(hja.phy)$Organ %<>% as.factor()
+sample_data(hja.phy)$Early %<>% as.factor()
+sample_data(hja.phy)$Plate %<>% as.factor()
+sample_data(hja.phy)$Control %<>% as.factor()
+
+
+min.reads <- 70 #minimum reads per sample
+min.prop <- 0.001 #minimum proportion abudance of an OTU in any sample
+cutoff <- 0.02 #minimum proportion of occurrences of OTU among all samples--probably too high for these data!
+
+#applying the above should probably be done after splitting samples by organ--the latter seems like it could be problematic
+#you might still want to have the option to look at taxa shared in both tissues
+
+needle.fungi.hja.phy <- subset_taxa(hja.phy, Kingdom == "k__Fungi") %>% subset_samples(Control == "No" & Organ == "Needle")
+twig.fungi.hja.phy <- subset_taxa(hja.phy, Kingdom == "k__Fungi") %>% subset_samples(Control == "No" & Organ == "Twig")
+
+needle.fungi.hja.phy %<>% prune_samples(sample_sums(.) > min.reads,.) %>% filter_taxa(function(x) {sum(x) > 0}, TRUE)
+twig.fungi.hja.phy %<>% prune_samples(sample_sums(.) > min.reads,.) %>% filter_taxa(function(x) {sum(x) > 0}, TRUE)
+
+t.needle.fungi.hja.otu <- otu_table(needle.fungi.hja.phy) %>% t()
+t.twig.fungi.hja.otu <- otu_table(twig.fungi.hja.phy) %>% t()
+
+keep.t.needle.fungi.hja.otu <- codaSeq.filter(t.needle.fungi.hja.otu, min.reads = min.reads, min.prop=min.prop, min.occurrence = cutoff, samples.by.row=FALSE)
+keep.t.twig.fungi.hja.otu <- codaSeq.filter(t.twig.fungi.hja.otu, min.reads = min.reads, min.prop=min.prop, min.occurrence = cutoff, samples.by.row=FALSE)
+
+gbm.needle.fungi.hja.otu <- cmultRepl(t(keep.t.needle.fungi.hja.otu), label=0, method="GBM")
+gbm.twig.fungi.hja.otu <- cmultRepl(t(keep.t.twig.fungi.hja.otu), label=0, method="GBM")
+
+#czm.needle.fungi.hja.otu <- cmultRepl(t(keep.t.needle.fungi.hja.otu), label=0, method="CZM")
+#czm.twig.fungi.hja.otu <- cmultRepl(t(keep.t.twig.fungi.hja.otu), label=0, method="CZM")
+
+clr.gbm.needle.fungi.hja.otu <- codaSeq.clr(gbm.needle.fungi.hja.otu, samples.by.row=TRUE)
+clr.gbm.twig.fungi.hja.otu <- codaSeq.clr(gbm.twig.fungi.hja.otu, samples.by.row=TRUE)
+
+#clr.czm.needle.fungi.hja.otu <- codaSeq.clr(czm.needle.fungi.hja.otu, samples.by.row=TRUE)
+#clr.czm.twig.fungi.hja.otu <- codaSeq.clr(czm.twig.fungi.hja.otu, samples.by.row=TRUE)
+#the success of this step seems to largely depend on the choice of cutoff value--i.e. it simply was not working at cutoff = 0.01
+
+otu_table(needle.fungi.hja.phy) <- otu_table(clr.gbm.needle.fungi.hja.otu, taxa_are_rows = FALSE)
+otu_table(twig.fungi.hja.phy) <- otu_table(clr.gbm.twig.fungi.hja.otu, taxa_are_rows = FALSE)
+
+#otu_table(needle.fungi.hja.phy) <- otu_table(clr.czm.needle.fungi.hja.otu, taxa_are_rows = FALSE)
+#otu_table(twig.fungi.hja.phy) <- otu_table(clr.czm.twig.fungi.hja.otu, taxa_are_rows = FALSE)
+
+needle.fungi.hja.meta <- needle.fungi.hja.phy %>% sample_data() %>% data.frame()
+twig.fungi.hja.meta <- twig.fungi.hja.phy %>% sample_data() %>% data.frame()
+
+needle.fungi.hja.euc <- phyloseq::distance(needle.fungi.hja.phy, "euclidean")
+twig.fungi.hja.euc <- phyloseq::distance(twig.fungi.hja.phy, "euclidean")
+#space.needle.fungi.hja <- needle.fungi.hja.meta$Height
+#space.needle.fungi.hja.dist <-  dist(space.needle.fungi.hja, method = "euclidean", diag = FALSE, upper = FALSE)
+#mantel(needle.fungi.hja.euc, space.needle.fungi.hja.dist)
+```
+
+```{r}
+#Needles
+
+#PERMANOVA to test null of no differences in the relative magnitude of OTUs among objects from different groups or treatments.
+
+needle.fungi.hja.perm <- adonis(needle.fungi.hja.euc~Tree+Age+Height, data=needle.fungi.hja.meta)
+
+#PERMDISP2 to assess of multivariate homogeneity of group dispersions
+
+#not apparent whether looking at these individually is good practice or not 
+
+#height.needle.fungi.hja.bdisp <- betadisper(needle.fungi.hja.euc,needle.fungi.hja.meta$Height)
+#height.needle.fungi.hja.bdisp.anova <- height.needle.fungi.hja.bdisp %>% anova()
+
+#tree.needle.fungi.hja.bdisp <- betadisper(needle.fungi.hja.euc,needle.fungi.hja.meta$Tree)
+#tree.needle.fungi.hja.bdisp.anova <- tree.needle.fungi.hja.bdisp %>% anova()
+
+#age.needle.fungi.hja.bdisp <- betadisper(needle.fungi.hja.euc,needle.fungi.hja.meta$Age)
+#age.needle.fungi.hja.bdisp.anova <- age.needle.fungi.hja.bdisp %>% anova()
+
+#Twigs
+
+#PERMANOVA
+
+twig.fungi.hja.perm <- adonis(twig.fungi.hja.euc~Tree+Height, data=twig.fungi.hja.meta)
+
+#PERMDISP2
+
+#height.twig.fungi.hja.bdisp <- betadisper(twig.fungi.hja.euc,twig.fungi.hja.meta$Height)
+#height.twig.fungi.hja.bdisp.anova <- height.twig.fungi.hja.bdisp %>% anova()
+
+#tree.twig.fungi.hja.bdisp <- betadisper(twig.fungi.hja.euc,twig.fungi.hja.meta$Tree)
+#tree.twig.fungi.hja.bdisp.anova <- tree.twig.fungi.hja.bdisp %>% anova()
+```
+
+```{r}
+pcoa.needle.fungi.hja.ord <- ordinate(needle.fungi.hja.phy, "PCoA", "euclidean")
+pcoa.twig.fungi.hja.ord <- ordinate(twig.fungi.hja.phy, "PCoA", "euclidean")
+nmds.needle.fungi.hja.ord <- ordinate(needle.fungi.hja.phy, "NMDS", "euclidean", trymax = 150)
+nmds.twig.fungi.hja.ord <- ordinate(twig.fungi.hja.phy, "NMDS", "euclidean", trymax = 150)
+
+canopy.pcoa.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, pcoa.needle.fungi.hja.ord, type = "samples", shape ="CanopyLevel", color = "CanopyLevel")
+height.pcoa.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, pcoa.needle.fungi.hja.ord, type = "samples", color = "Height")
+age.pcoa.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, pcoa.needle.fungi.hja.ord, type = "samples", shape = "Age", color = "Age")
+tree.pcoa.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, pcoa.needle.fungi.hja.ord, type = "samples", color = "Tree")
+early.pcoa.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, pcoa.needle.fungi.hja.ord, type = "samples", color = "Early")
+
+canopy.nmds.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, nmds.needle.fungi.hja.ord, type = "samples", shape ="CanopyLevel",color = "CanopyLevel")
+tree.nmds.needle.fungi.hja.ord.plot <- plot_ordination(needle.fungi.hja.phy, nmds.needle.fungi.hja.ord, type = "samples", color = "Tree")
+
+canopy.pcoa.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, pcoa.twig.fungi.hja.ord, type = "samples", shape ="CanopyLevel", color = "CanopyLevel")
+height.pcoa.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, pcoa.twig.fungi.hja.ord, type = "samples", color = "Height")
+tree.pcoa.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, pcoa.twig.fungi.hja.ord, type = "samples", color = "Tree")
+early.pcoa.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, pcoa.twig.fungi.hja.ord, type = "samples", color = "Early")
+
+canopy.nmds.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, nmds.twig.fungi.hja.ord, type = "samples", shape ="CanopyLevel", color = "CanopyLevel")
+tree.nmds.twig.fungi.hja.ord.plot <- plot_ordination(twig.fungi.hja.phy, nmds.twig.fungi.hja.ord, type = "samples", color = "Tree")
+
+```
+
+```{r}
+canopy.pcoa.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by canopy level")
+
+height.pcoa.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle sample composition by height")
+
+age.pcoa.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by age")
+
+tree.pcoa.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by tree") + scale_color_colorblind()
+
+early.pcoa.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by sampling time")
+
+canopy.nmds.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by canopy level")
+
+tree.nmds.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle sample composition by tree") + scale_color_colorblind()
+
+canopy.pcoa.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig sample composition by canopy level")
+
+height.pcoa.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig sample composition by height")
+
+tree.pcoa.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig sample composition by tree") + scale_color_colorblind()
+
+early.pcoa.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig sample composition by sampling time")
+
+canopy.nmds.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig sample composition by canopy level")
+
+tree.nmds.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig sample composition by tree") + scale_color_colorblind()
+```
