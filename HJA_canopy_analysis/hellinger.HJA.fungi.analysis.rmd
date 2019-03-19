@@ -1,0 +1,175 @@
+---
+title: "hellinger.HJA.fungi.analysis.rmd"
+author: "Kyle Gervers"
+date: "March 1, 2019"
+output: html_document
+---
+
+```{r}
+library(propr)
+library(grid)
+library(tidyverse)
+library(magrittr)
+library(phyloseq)
+library(ggthemes)
+library(ggplot2)
+library(vegan)
+library(metagMisc)
+#I will include the codaseq function folder
+
+setwd("C:/Users/gerve/Desktop/PhD/Projects/DF_MiSeq/data/scratch/")
+```
+
+```{r}
+needle <- function(x) {
+  
+  needle.min.reads <- 200 #minimum reads per sample
+  
+  needle.fungi.hja.phy <- subset_taxa(x, Kingdom == "k__Fungi") %>% subset_samples(Control == "No" & Organ == "Needle") %>% subset_samples(Tree == "T1" | Tree == "T3" | Tree == "T5" | Tree == "T6") %>% subset_samples(sampleID != "P2_E_8")
+  
+  keep.reads <- sample_sums(needle.fungi.hja.phy) > needle.min.reads
+  
+  needle.fungi.hja.phy %<>% prune_samples(keep.reads,.) %>% filter_taxa(function(x) {sum(x > 25) > (0.01*length(x))}, TRUE)
+  
+  needle.fungi.hja.phy <- transform_sample_counts(needle.fungi.hja.phy, function(x) {sqrt(x/sum(x))})
+  
+  needle.fungi.hja.otu <- otu_table(needle.fungi.hja.phy) %>% data.frame()
+  
+  needle.fungi.hja.meta <- sample_data(needle.fungi.hja.phy) %>% data.frame()
+  
+  write.csv(needle.fungi.hja.otu, file = "4.hell.needle.fungi.hja.otu.csv")
+  
+  write.csv(needle.fungi.hja.meta, file = "4.hell.needle.fungi.hja.meta.csv")
+  
+  return(needle.fungi.hja.phy)
+  
+}
+```
+
+```{r}
+twig <- function(x) {
+  
+twig.min.reads <- 200 #minimum reads per sample
+  
+  twig.fungi.hja.phy <- subset_taxa(x, Kingdom == "k__Fungi") %>% subset_samples(Control == "No" & Organ == "Twig") %>% subset_samples(Tree == "T1" | Tree == "T3" | Tree == "T5" | Tree == "T6")
+  
+  keep.reads <- sample_sums(twig.fungi.hja.phy) > twig.min.reads
+  
+  twig.fungi.hja.phy %<>% prune_samples(keep.reads,.) %>% filter_taxa(function(x) {sum(x > 25) > (.01*length(x))}, TRUE)
+  
+  twig.fungi.hja.phy <- transform_sample_counts(twig.fungi.hja.phy, function(x) {sqrt(x/sum(x))})
+  
+  twig.fungi.hja.otu <- otu_table(twig.fungi.hja.phy) %>% data.frame()
+  
+  twig.fungi.hja.meta <- sample_data(twig.fungi.hja.phy) %>% data.frame()
+  
+  write.csv(twig.fungi.hja.otu, file = "4.hell.twig.fungi.hja.otu.csv")
+  
+  write.csv(twig.fungi.hja.meta, file = "4.hell.twig.fungi.hja.meta.csv")
+  
+  return(twig.fungi.hja.phy)
+
+}  
+```
+
+```{r}
+
+#For some reason, not all ordinations get produced after this. Hash out every ordination that you don't want and run each ordination separately if needed
+
+ord.needle <- function(x){
+  
+  needle.fungi.hja.ord <- ordinate(x, "NMDS", "bray", trymax = 200)
+
+  #height.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "HeightPlusZ")
+   age.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", shape = "Age", color = "Age")
+  # canopy.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", shape ="CanopyLevel", color = "CanopyLevel")
+  # tree.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "Tree")
+  # elevlev.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "ElevLevel")
+  # cov.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "Covered")
+  # veght.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "MedVegHt")
+  # relht.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "RelHeight")
+  # htminveg.needle.fungi.hja.ord.plot <- plot_ordination(x, needle.fungi.hja.ord, type = "samples", color = "HtMinusVeg")
+  
+  #htminveg.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #relht.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #veght.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #cov.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #elevlev.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #tree.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_color_colorblind() + ggtitle("Needle")
+  #height.needle.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Needle")
+  #canopy.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle")
+  age.needle.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Needle") + geom_text(aes(label=sample_names(x)),hjust=0, vjust=0)
+  
+}
+
+```
+
+```{r}
+
+#For some reason, not all ordinations get produced after this. Hash out every ordination that you don't want and run each ordination separately if needed
+
+ord.twig <- function(x){
+  
+  twig.fungi.hja.ord <- ordinate(x, "NMDS", "bray", trymax = 200)
+
+  #height.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "Height")
+  # canopy.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", shape ="CanopyLevel", color = "CanopyLevel")
+   tree.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "Tree")
+  # elevlev.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "ElevLevel")
+  # cov.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "AvgCov")
+  # veght.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "MedVegHt")
+  #relht.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "RelHeight")
+  # htminveg.twig.fungi.hja.ord.plot <- plot_ordination(x, twig.fungi.hja.ord, type = "samples", color = "HtMinusVeg")
+  
+  #htminveg.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig")
+  #relht.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig samples by relative position in canopy")
+  #veght.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) +ggtitle("Twig")
+  # cov.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig")
+  #elevlev.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig")
+  tree.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_color_colorblind() + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig")
+  #height.twig.fungi.hja.ord.plot + geom_point(size=5) + scale_fill_gradient2(midpoint = 3) + ggtitle("Twig")
+  #canopy.twig.fungi.hja.ord.plot + geom_point(size=5) + ggtitle("Twig-Canopy Level")
+}
+```
+
+```{r}
+
+clus98.hja.phy <- readRDS("clus98.hja.phy.rds") #ASVs clustered (using vsearch) at 98% similarity, using greedy clustering
+
+hja.meta <- read.csv("./HJA.metadata.10.Mar.2019.csv",as.is=T,row.names=1)
+
+sample_data(clus98.hja.phy) <- hja.meta
+
+sample_data(clus98.hja.phy)$sampleID <- sample_names(clus98.hja.phy)
+
+needle.fungi.hja.phy <- needle(clus98.hja.phy) #Toggle these on and off as needed
+
+needle.fungi.hja.meta <- sample_data(needle.fungi.hja.phy) %>% data.frame()
+
+needle.fungi.hja.otu <- otu_table(needle.fungi.hja.phy) %>% data.frame()
+
+#needle.fungi.hja.tax <- tax_table(needle.fungi.hja.phy) %>% data.frame()
+
+twig.fungi.hja.phy <- twig(clus98.hja.phy) #Toggle these on and off as needed
+
+twig.fungi.hja.meta <- sample_data(twig.fungi.hja.phy) %>% data.frame()
+
+twig.fungi.hja.otu <- otu_table(twig.fungi.hja.phy) %>% data.frame()
+
+#twig.fungi.hja.tax <- tax_table(twig.fungi.hja.phy) %>% data.frame()
+
+# needle.fungi.hja.ord <- ord.needle(needle.fungi.hja.phy)
+# 
+# twig.fungi.hja.ord <- ord.twig(twig.fungi.hja.phy)
+
+# needle.dist <- phyloseq::distance(needle.fungi.hja.phy,"bray")
+# anova(betadisper(needle.dist, needle.fungi.hja.meta$Tree, type = "centroid"))
+# anova(betadisper(needle.dist, needle.fungi.hja.meta$Age, type = "centroid"))
+# anova(betadisper(needle.dist, needle.fungi.hja.meta$CanopyLevel, type = "centroid"))
+# adonis(needle.dist~Tree/(CanopyLevel + Age),data = needle.fungi.hja.meta, strata = needle.fungi.hja.meta$Tree)
+# 
+# twig.dist <- phyloseq::distance(twig.fungi.hja.phy,"bray")
+# anova(betadisper(twig.dist, twig.fungi.hja.meta$Tree, type = "centroid"))
+# anova(betadisper(twig.dist, twig.fungi.hja.meta$CanopyLevel, type = "centroid"))
+# adonis(twig.dist~Tree/(CanopyLevel),data = twig.fungi.hja.meta, strata = twig.fungi.hja.meta$Tree)
+```
